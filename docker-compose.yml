@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  incident-jira-webhook:
+    build: .
+    container_name: incident-jira-webhook
+    ports:
+      - "8080:5000"
+    env_file:
+      - .env
+    restart: unless-stopped
+    
+    # Uncomment to use environment file instead
+    # env_file:
+    #   - .env
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+# Optional: Add nginx reverse proxy for HTTPS
+# Uncomment the sections below if you need HTTPS termination
+
+# networks:
+#   webhook-network:
+#     driver: bridge
+
+# services:
+#   incident-jira-webhook:
+#     # ... existing config ...
+#     networks:
+#       - webhook-network
+#     # Remove ports section if using nginx
+#     # ports:
+#     #   - "5000:5000"
+#   
+#   nginx:
+#     image: nginx:alpine
+#     container_name: nginx-proxy
+#     ports:
+#       - "80:80"
+#       - "443:443"
+#     volumes:
+#       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+#       - ./ssl:/etc/nginx/ssl:ro
+#     depends_on:
+#       - incident-jira-webhook
+#     networks:
+#       - webhook-network
+#     restart: unless-stopped

@@ -1,0 +1,30 @@
+{
+  "event_type": "incident.custom_field_updated",
+  "incident": {
+    "id": "01JZ90CRB65ZM1AQKDAGEVK4D9",
+    "name": "test-incident",
+    "external_issue_reference": {
+      "provider": "jira",
+      "issue_name": "SUP-68",
+      "issue_permalink": "https://incident-team-hjcsiwyh.atlassian.net/browse/SUP-68"
+    },
+    "custom_field_entries": [
+      {
+        "custom_field": {
+          "id": "01JYFB01TXNZD95RBCH9QT4EMV",
+          "name": "Impacted component",
+          "field_type": "multi_select"
+        },
+        "values": [
+          {
+            "value_catalog_entry": {
+              "id": "01JYKTB5W90MT3R6FJHEDSN1ST",
+              "name": "Teletraan",
+              "external_id": "teletraan"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
