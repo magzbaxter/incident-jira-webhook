@@ -25,11 +25,14 @@ docker build -t incident-jira-webhook .
 ```bash
 docker run -d \
   --name incident-jira-webhook \
-  -p 5000:5000 \
+  -p 8080:5000 \
   -e JIRA_BASE_URL="https://your-domain.atlassian.net" \
   -e JIRA_USERNAME="your-email@company.com" \
   -e JIRA_API_TOKEN="your-jira-api-token" \
+  -e JIRA_WORKSPACE_ID="your-jira-workspace-id" \
   -e INCIDENT_API_TOKEN="your-incident-api-token" \
+  -e IMPACTED_COMPONENT_JIRA_FIELD_ID="customfield_10234" \
+  -e RESPONSIBLE_COMPONENT_JIRA_FIELD_ID="customfield_10235" \
   -e WEBHOOK_SECRET="optional-webhook-secret" \
   --restart unless-stopped \
   incident-jira-webhook
@@ -45,12 +48,15 @@ services:
   incident-jira-webhook:
     build: .
     ports:
-      - "5000:5000"
+      - "8080:5000"
     environment:
       - JIRA_BASE_URL=https://your-domain.atlassian.net
       - JIRA_USERNAME=your-email@company.com
       - JIRA_API_TOKEN=your-jira-api-token
+      - JIRA_WORKSPACE_ID=your-jira-workspace-id
       - INCIDENT_API_TOKEN=your-incident-api-token
+      - IMPACTED_COMPONENT_JIRA_FIELD_ID=customfield_10234
+      - RESPONSIBLE_COMPONENT_JIRA_FIELD_ID=customfield_10235
       - WEBHOOK_SECRET=optional-webhook-secret
       - PORT=5000
     restart: unless-stopped
@@ -89,6 +95,16 @@ docker-compose up -d
 | `WEBHOOK_SECRET` | - | Optional webhook verification secret |
 | `PORT` | `5000` | Port to run the webhook listener on |
 
+### Alternative Configuration Methods
+
+This application uses environment variables for configuration, but you can easily wrap it with your own configuration management approach if needed. For example:
+
+- **Configuration files**: Create a wrapper script that reads from JSON/YAML/TOML files and sets environment variables
+- **Secret management**: Use tools like HashiCorp Vault, AWS Secrets Manager, or Kubernetes secrets to populate environment variables
+- **Configuration management**: Integrate with tools like Consul, etcd, or your existing configuration system
+
+The application is designed to be configuration-agnostic - it simply reads standard environment variables regardless of how they're populated.
+
 ## 🔧 Production Deployment
 
 ### With Reverse Proxy (Recommended)
@@ -105,7 +121,10 @@ services:
       - JIRA_BASE_URL=https://your-domain.atlassian.net
       - JIRA_USERNAME=your-email@company.com
       - JIRA_API_TOKEN=your-jira-api-token
+      - JIRA_WORKSPACE_ID=your-jira-workspace-id
       - INCIDENT_API_TOKEN=your-incident-api-token
+      - IMPACTED_COMPONENT_JIRA_FIELD_ID=customfield_10234
+      - RESPONSIBLE_COMPONENT_JIRA_FIELD_ID=customfield_10235
     restart: unless-stopped
     networks:
       - webhook-network
@@ -137,7 +156,10 @@ Create a `.env` file for sensitive data:
 JIRA_BASE_URL=https://your-domain.atlassian.net
 JIRA_USERNAME=your-email@company.com
 JIRA_API_TOKEN=your-jira-api-token
+JIRA_WORKSPACE_ID=your-jira-workspace-id
 INCIDENT_API_TOKEN=your-incident-api-token
+IMPACTED_COMPONENT_JIRA_FIELD_ID=customfield_10234
+RESPONSIBLE_COMPONENT_JIRA_FIELD_ID=customfield_10235
 WEBHOOK_SECRET=your-webhook-secret
 ```
 
@@ -156,7 +178,7 @@ env_file:
    - Go to Settings → Webhooks
    - Add new webhook
    - URL: Your webhook endpoint
-   - Events: Select `incident.custom_field_updated`
+   - Events: Select `public_incident.incident_updated_v2`
    - Secret: Use your `WEBHOOK_SECRET` if configured
 
 ## 🧪 Testing
@@ -231,7 +253,7 @@ Use this with your monitoring system (Prometheus, Datadog, etc.).
 
 ## 🛠️ How It Works
 
-1. **Webhook Received**: incident.io sends `incident.custom_field_updated` event
+1. **Webhook Received**: incident.io sends `public_incident.incident_updated_v2` event
 2. **Field Check**: Verifies if updated field is a component field
 3. **Catalog Lookup**: Fetches component details from incident.io catalog API
 4. **Object Key Extraction**: Gets the "object key" attribute (e.g., "PIN-3")

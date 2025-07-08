@@ -135,7 +135,7 @@ type IncidentJiraSync struct {
 }
 
 func NewIncidentJiraSync(config Config) *IncidentJiraSync {
-	// Create HTTP client with TLS config for debugging
+	// Create HTTP client with TLS config
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -226,7 +226,7 @@ func (s *IncidentJiraSync) formatJiraComponentValue(objectID, catalogEntryID str
 
 // updateJiraCustomField updates a custom field in Jira with the provided values
 func (s *IncidentJiraSync) updateJiraCustomField(jiraIssueKey, fieldID string, values []JiraComponentValue) error {
-	// Create a fresh HTTP client for this request (exactly like our working test)
+	// Create HTTP client for Jira API request
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -387,20 +387,18 @@ func (s *IncidentJiraSync) webhookHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	
-	// Temporarily disable webhook secret verification for debugging
-	/*
-	if s.config.WebhookSecret != "" {
-		signature := r.Header.Get("X-Incident-Signature")
-		if signature == "" {
-			log.Printf("Missing webhook signature")
-			http.Error(w, "Missing signature", http.StatusUnauthorized)
-			return
-		}
-		// In production, you should verify the signature properly
-	}
-	*/
+	// TODO: Implement webhook secret verification if needed
+	// if s.config.WebhookSecret != "" {
+	// 	signature := r.Header.Get("X-Incident-Signature")
+	// 	if signature == "" {
+	// 		log.Printf("Missing webhook signature")
+	// 		http.Error(w, "Missing signature", http.StatusUnauthorized)
+	// 		return
+	// 	}
+	// 	// Verify signature against webhook secret
+	// }
 	
-	// Parse webhook payload - first as raw JSON to see the structure
+	// Parse webhook payload
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Failed to read request body: %v", err)
@@ -408,11 +406,8 @@ func (s *IncidentJiraSync) webhookHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	
-	// Debug: log the raw payload to understand the structure  
-	log.Printf("=== WEBHOOK RECEIVED ===")
-	log.Printf("Headers: %+v", r.Header)
-	log.Printf("Raw payload: %s", string(body))
-	log.Printf("========================")
+	// Log webhook receipt for monitoring
+	log.Printf("Webhook received from %s", r.RemoteAddr)
 	
 	var payload IncidentData
 	if err := json.Unmarshal(body, &payload); err != nil {
@@ -421,12 +416,10 @@ func (s *IncidentJiraSync) webhookHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	
-	// Debug: log the incident structure to understand the real payload
-	log.Printf("Received event type: %s", payload.EventType)
-	log.Printf("Incident ID: %s", payload.Incident.ID)
-	log.Printf("External issue reference: %+v", payload.Incident.ExternalIssueReference)
+	// Log event details for monitoring
+	log.Printf("Processing event type: %s", payload.EventType)
 	
-	// Check if this is a custom field update event
+	// Only process incident update events
 	if payload.EventType != "incident.custom_field_updated" && payload.EventType != "public_incident.incident_updated_v2" {
 		log.Printf("Ignoring event type: %s", payload.EventType)
 		w.WriteHeader(http.StatusOK)
@@ -451,61 +444,6 @@ func (s *IncidentJiraSync) healthHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }
 
-func (s *IncidentJiraSync) testJiraHandler(w http.ResponseWriter, r *http.Request) {
-	// Test the exact same request as our working test program
-	client := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
-	
-	// Test GET first
-	req, _ := http.NewRequest("GET", "https://incident-team-hjcsiwyh.atlassian.net/rest/api/3/issue/SUP-68", nil)
-	req.SetBasicAuth(s.config.JiraUsername, s.config.JiraAPIToken)
-	req.Header.Set("Content-Type", "application/json")
-	
-	resp, err := client.Do(req)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-	defer resp.Body.Close()
-	
-	result := map[string]interface{}{
-		"get_status": resp.StatusCode,
-	}
-	
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		result["get_response"] = string(body)
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(result)
-		return
-	}
-	
-	// Test PUT
-	payload := `{"fields": {"customfield_10234": [{"id": "4d594104-b4d4-4ffe-8765-389ad269cbc9:3", "objectId": "3"}]}}`
-	
-	putReq, _ := http.NewRequest("PUT", "https://incident-team-hjcsiwyh.atlassian.net/rest/api/3/issue/SUP-68", bytes.NewBuffer([]byte(payload)))
-	putReq.SetBasicAuth(s.config.JiraUsername, s.config.JiraAPIToken)
-	putReq.Header.Set("Content-Type", "application/json")
-	
-	putResp, err := client.Do(putReq)
-	if err != nil {
-		result["put_error"] = err.Error()
-	} else {
-		defer putResp.Body.Close()
-		result["put_status"] = putResp.StatusCode
-		if putResp.StatusCode >= 400 {
-			body, _ := io.ReadAll(putResp.Body)
-			result["put_response"] = string(body)
-		}
-	}
-	
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(result)
-}
 
 func getConfig() Config {
 	return Config{
@@ -568,7 +506,6 @@ func main() {
 	// Setup HTTP routes
 	http.HandleFunc("/webhook", syncHandler.webhookHandler)
 	http.HandleFunc("/health", syncHandler.healthHandler)
-	http.HandleFunc("/test-jira", syncHandler.testJiraHandler)
 	
 	log.Printf("Starting incident.io to Jira webhook listener on port %s...", config.Port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", config.Port), nil))
